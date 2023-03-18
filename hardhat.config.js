@@ -19,11 +19,11 @@ module.exports = {
         localhost: {
             chainId: 31337,
         },
-        goerli: {
+        sepolia: {
             url: SEPOLIA_RPC_URL,
             accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
             saveDeployments: true,
-            chainId: 5,
+            chainId: 11155111,
         },
     },
     namedAccounts: {
