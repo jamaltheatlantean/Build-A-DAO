@@ -1,0 +1,35 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/DAOContract.sol": {
+      "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.10;\r\n\r\n/**\r\n * A DAO making contract, for proposals, and contributions, and voting.\r\n * collects money from investors and allocates shares.\r\n * Keep track of contributions and shares.\r\n * Allow investors transfer shares.\r\n * Allow investment proposals to be created and voted.\r\n * Execute successful investment proposals.\r\n */\r\n\r\ncontract DAO {\r\n\r\n    struct Proposal{\r\n        uint id;\r\n        uint amount;\r\n        uint votes;\r\n        uint end;\r\n        string name;\r\n        address payable recipient;\r\n        bytes data;\r\n        bool executed;\r\n    }\r\n\r\n    mapping(address => bool) public isInvestor; // keep track of investors\r\n    mapping(address => uint) public shares; // keep track of shares\r\n    mapping(address => mapping(uint => bool)) public votes; // keep track of individual votes\r\n    mapping(uint => Proposal) public proposals; // maps proposals\r\n    uint public totalShares; // total shares of members\r\n    uint public availableFunds; // address(this).balance of contract\r\n    uint public contributionTime;\r\n    uint public contributionEnd; // time for ending contributions\r\n    uint public nextProposalId; // id for proposals\r\n    uint public voteTime; // deadline for vote on proposal to end\r\n    uint public minVotes; // minimal number of votes required\r\n    address public admin;\r\n    address [] public investors;\r\n\r\n    modifier onlyInvestors() {\r\n        require(isInvestor[msg.sender] = true, \"error: Not investor\");\r\n        _;\r\n    }\r\n\r\n    modifier onlyAdmin() {\r\n        require(msg.sender == admin, \"error: nnot admin\");\r\n        _;\r\n    }\r\n\r\n    constructor() {\r\n        admin = msg.sender;\r\n    }\r\n\r\n    // for eth returns of successful proposal investments\r\n    receive() external payable {\r\n        availableFunds += msg.value;\r\n    }\r\n\r\n    function setContributionTimeNewVoteTimeMinVotes(uint _contributionTime, uint _voteTime, uint _minVotes) public onlyInvestors {\r\n        require(_minVotes > 0 && _minVotes < 200, \"error: minVotes should be between 0 and 200\");\r\n        minVotes = _minVotes;\r\n\r\n        contributionTime = _contributionTime;\r\n        contributionEnd = block.timestamp + contributionTime;\r\n\r\n        voteTime = _voteTime;\r\n    }\r\n\r\n    function contribute(address investor) payable external {\r\n        require(block.timestamp < contributionEnd, \"error: contribution over\");\r\n        investors.push(investor);\r\n        isInvestor[msg.sender] = true; // make contributor an investor\r\n        shares[msg.sender] += msg.value; // increase shares of investor\r\n        totalShares += msg.value; // increase totalShares\r\n        availableFunds += msg.value; // increase available funds\r\n    }\r\n\r\n    // use function to extend contribution time\r\n    function extendContributionTime(uint _newContributionTime) public onlyAdmin {\r\n        contributionEnd = block.timestamp + _newContributionTime;\r\n    }\r\n\r\n    function redeemShare(uint amount) external onlyInvestors {\r\n        require(shares[msg.sender] >= amount, \"error: not enough shares\");\r\n        require(availableFunds >= amount, \"error: not enough available funds\");\r\n        shares[msg.sender] -= amount;\r\n        availableFunds -= amount;\r\n        payable(msg.sender).transfer(amount);\r\n    }\r\n\r\n    function transferShare(uint amount, address to) external onlyInvestors {\r\n        require(shares[msg.sender] >= amount, \"error: insufficient shares\");\r\n        shares[msg.sender] -= amount;\r\n        shares[to] += amount;\r\n        isInvestor[to] = true;\r\n    }\r\n\r\n    function createProposal(\r\n        string memory name,\r\n        uint amount,\r\n        address payable recipient,\r\n        bytes calldata data\r\n    ) public onlyInvestors {\r\n        require(availableFunds >= amount, \"error: insufficient funds\");\r\n        proposals[nextProposalId] = Proposal(\r\n            nextProposalId,\r\n            amount,\r\n            0,\r\n            block.timestamp + voteTime,\r\n            name,\r\n            recipient,\r\n            data,\r\n            false\r\n        );\r\n        availableFunds -= amount;\r\n        nextProposalId++;\r\n    }\r\n\r\n    function voteOnProposal(uint proposalId) external onlyInvestors {\r\n        Proposal storage proposal = proposals[proposalId];\r\n        require(votes[msg.sender][proposalId] == false, \"error: investor can only vote once\");\r\n        require(block.timestamp < proposal.end, \"error: proposal already ended\");\r\n        votes[msg.sender][proposalId] = true;\r\n        proposal.votes += shares[msg.sender];\r\n    }\r\n\r\n    function executePropsal(uint proposalId) external onlyAdmin {\r\n        Proposal storage proposal = proposals[proposalId];\r\n        require(block.timestamp >= proposal.end, \"error: cannot execute before end of proposal\");\r\n        require(!proposal.executed, \"error: proposal already executed\");\r\n        require((proposal.votes / totalShares) * 200 >= minVotes, \"error: cannot execute proposal with votes below minVotes\");\r\n        // transfer funds using call for check effects\r\n        (bool success, ) = proposal.recipient.call{value: proposal.amount}(proposal.data);\r\n        require(success, \"error: tx failed\");\r\n    }\r\n\r\n    function transferFunds(address payable to, bytes memory data, uint amount) external onlyAdmin {\r\n        require(amount <= availableFunds, \"error: insufficient funds\");\r\n        availableFunds -= amount;\r\n        (bool success, ) = to.call{value: amount}(data);\r\n        require(success, \"error: tx failed\");\r\n    }\r\n    \r\n    // transfer using to\r\n    function transferEther(uint amount, address payable to) external onlyAdmin {\r\n        to.transfer(amount);\r\n    }\r\n\r\n    // Getter functions\r\n    function getInvestors() public view returns(address [] memory) {\r\n        return investors;\r\n    }\r\n\r\n    function getTotalAvailableFunds() public view returns (uint256) {\r\n        return address(this).balance;\r\n    }\r\n\r\n    function getShares(address investor) public view returns(uint256) {\r\n        return shares[investor];\r\n    }\r\n\r\n}"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
