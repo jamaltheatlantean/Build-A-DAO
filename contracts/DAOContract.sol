@@ -29,6 +29,7 @@ contract DAO {
     mapping(uint => Proposal) public proposals; // maps proposals
     uint public totalShares; // total shares of members
     uint public availableFunds; // address(this).balance of contract
+    uint public contributionTime;
     uint public contributionEnd; // time for ending contributions
     uint public nextProposalId; // id for proposals
     uint public voteTime; // deadline for vote on proposal to end
@@ -46,20 +47,23 @@ contract DAO {
         _;
     }
 
-    constructor(
-        uint contributionTime,
-        uint _voteTime,
-        uint _minVotes) {
-        require(_minVotes > 0 && minVotes < 200, "minVotes should be between 0 and 200");
-        contributionEnd = block.timestamp + contributionTime;
-        voteTime = _voteTime;
-        minVotes = _minVotes;
+    constructor() {
         admin = msg.sender;
     }
 
     // for eth returns of successful proposal investments
     receive() external payable {
         availableFunds += msg.value;
+    }
+
+    function setContributionTimeNewVoteTimeMinVotes(uint _contributionTime, uint _voteTime, uint _minVotes) public onlyInvestors {
+        require(_minVotes > 0 && _minVotes < 200, "error: minVotes should be between 0 and 200");
+        minVotes = _minVotes;
+
+        contributionTime = _contributionTime;
+        contributionEnd = block.timestamp + contributionTime;
+
+        voteTime = _voteTime;
     }
 
     function contribute(address investor) payable external {
